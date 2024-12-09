@@ -4,10 +4,12 @@ import functools
 import json
 import logging
 import os
+import time
 from contextvars import ContextVar
 from copy import deepcopy
 from typing import Any, Callable, Literal, Type, cast
 
+from shortuuid import uuid
 from tenacity import (
     retry,
     retry_if_exception,
@@ -352,24 +354,35 @@ class Model:
                 cache="write" if cache else None,
             )
 
+            generate_id = uuid()
+            logger.debug(f"model generate {generate_id} ({str(self)})")
+            time_start = time.perf_counter()
             result = await self.api.generate(
                 input=input,
                 tools=tools,
                 tool_choice=tool_choice,
                 config=config,
             )
+            time_elapsed = time.perf_counter() - time_start
+            logger.debug(f"model generate {generate_id} (completed)")
             if isinstance(result, tuple):
                 output, call = result
             else:
                 output = result
                 call = None
 
+            # update output with time elapsed
+            output.time = time_elapsed
+
             # complete the transcript event
             complete(output, call)
 
             # record usage
             if output.usage:
+                # record usage
                 record_model_usage(f"{self}", output.usage)
+
+                # send telemetry if its hooked up
                 await send_telemetry(
                     "model_usage",
                     json.dumps(dict(model=str(self), usage=output.usage.model_dump())),
@@ -757,6 +770,11 @@ def init_sample_model_usage() -> None:
 def record_model_usage(model: str, usage: ModelUsage) -> None:
     set_model_usage(model, usage, sample_model_usage_context_var.get(None))
     set_model_usage(model, usage, model_usage_context_var.get(None))
+
+    # update active sample
+    from inspect_ai.log._samples import set_active_sample_total_tokens
+
+    set_active_sample_total_tokens(sample_total_tokens())
 
 
 def set_model_usage(

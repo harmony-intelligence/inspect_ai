@@ -9,6 +9,7 @@ from .environment import (
     SampleInit,
     SandboxConnection,
     SandboxEnvironment,
+    SandboxEnvironmentConfigType,
 )
 from .registry import registry_find_sandboxenv
 
@@ -93,7 +94,7 @@ async def sandbox_connections() -> dict[str, SandboxConnection]:
         for name, environment in environments.items():
             try:
                 connections[name] = await environment.connection()
-            except NotImplementedError:
+            except (NotImplementedError, ConnectionError):
                 pass
         return connections
     else:
@@ -110,7 +111,7 @@ def raise_no_sandbox() -> NoReturn:
 async def init_sandbox_environments_sample(
     type: str,
     task_name: str,
-    config: str | None,
+    config: SandboxEnvironmentConfigType | None,
     files: dict[str, bytes],
     setup: bytes | None,
     metadata: dict[str, Any],
@@ -149,7 +150,7 @@ async def init_sandbox_environments_sample(
 async def cleanup_sandbox_environments_sample(
     type: str,
     task_name: str,
-    config: str | None,
+    config: SandboxEnvironmentConfigType | None,
     environments: dict[str, SandboxEnvironment],
     interrupted: bool,
 ) -> None:

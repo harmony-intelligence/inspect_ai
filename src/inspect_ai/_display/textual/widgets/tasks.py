@@ -6,17 +6,20 @@ from rich.console import RenderableType
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Container, ScrollableContainer
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import ProgressBar, Static
 from typing_extensions import override
 
+from inspect_ai._display.core.results import task_metric
 from inspect_ai._display.textual.widgets.clock import Clock
 
 from ...core.display import (
     Progress,
     TaskCancelled,
     TaskDisplay,
+    TaskDisplayMetric,
     TaskError,
     TaskResult,
     TaskSpec,
@@ -25,6 +28,7 @@ from ...core.display import (
 from ...core.progress import (
     MAX_DESCRIPTION_WIDTH,
     MAX_MODEL_NAME_WIDTH,
+    progress_count,
     progress_description,
     progress_model_name,
 )
@@ -106,8 +110,8 @@ class TaskProgressView(Widget):
         height: auto;
         width: 1fr;
         layout: grid;
-        grid-size: 5 1;
-        grid-columns: auto auto auto 1fr auto;
+        grid-size: 7 1;
+        grid-columns: auto auto auto 1fr auto auto auto;
         grid-gutter: 1;
     }
     TaskProgressView Bar {
@@ -119,6 +123,9 @@ class TaskProgressView(Widget):
             color: $success;
         }
     }
+    #task-metrics {
+        color:$text-secondary;
+    }
     """
 
     def __init__(
@@ -129,6 +136,8 @@ class TaskProgressView(Widget):
         self.description_width = description_width
         self.model_name_width = model_name_width
         self.progress_bar = ProgressBar(total=task.profile.steps, show_eta=False)
+        self.count_display = Static()
+        self.metrics_display = Static(id="task-metrics")
         self.task_progress = TaskProgress(self.progress_bar)
 
     def compose(self) -> ComposeResult:
@@ -140,6 +149,8 @@ class TaskProgressView(Widget):
             progress_model_name(self.t.profile.model, self.model_name_width, pad=True)
         )
         yield self.progress_bar
+        yield self.count_display
+        yield self.metrics_display
         yield Clock()
 
     def on_mount(self) -> None:
@@ -151,9 +162,19 @@ class TaskProgressView(Widget):
 
     def complete(self, result: TaskResult) -> None:
         self.t.result = result
-        self.query_one(TaskStatusIcon).result = result
-        self.query_one(Clock).stop()
+        try:
+            self.query_one(TaskStatusIcon).result = result
+            self.query_one(Clock).stop()
+        except NoMatches:
+            pass
         self.task_progress.complete()
+
+    def sample_complete(self, complete: int, total: int) -> None:
+        self.count_display.update(progress_count(complete, total))
+
+    def update_metrics(self, metrics: list[TaskDisplayMetric]) -> None:
+        if len(metrics) > 0:
+            self.metrics_display.update(task_metric(metrics))
 
 
 class TaskStatusIcon(Static):
@@ -181,13 +202,38 @@ class TaskStatusIcon(Static):
             return Text("⠿", style=running)
 
 
+MAX_PROGRESS_PERCENT = 0.02
+MIN_PROGRESS_PERCENT = 0.98
+
+
 class TaskProgress(Progress):
     def __init__(self, progress_bar: ProgressBar) -> None:
         self.progress_bar = progress_bar
+        self.current_progress = 0
+
+        # always show a minimum amount of progress
+        minimum_steps = (
+            MAX_PROGRESS_PERCENT * progress_bar.total
+            if progress_bar.total is not None
+            else 0
+        )
+        self.progress_bar.update(progress=minimum_steps)
 
     @override
     def update(self, n: int = 1) -> None:
-        self.progress_bar.update(advance=n)
+        self.current_progress = self.current_progress + n
+
+        # enforce a maximum cap on task progress
+        max_progress = (
+            MIN_PROGRESS_PERCENT * self.progress_bar.total
+            if self.progress_bar.total is not None
+            else 0
+        )
+        if (
+            self.current_progress > self.progress_bar.progress
+            and self.current_progress < max_progress
+        ):
+            self.progress_bar.update(progress=self.current_progress)
 
     @override
     def complete(self) -> None:

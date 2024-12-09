@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.44
+
+- Fix incorrect url encoding when copying links to remote log files.
+
+## 0.3.43
+
+- Add support for links which open the log viewer directly in VSCode. You may copy links to remote log files from the logs panel of the Inspect Activity Panel.
+
 ## 0.3.42
 
 - Improve support for selecting text in the full screen terminal

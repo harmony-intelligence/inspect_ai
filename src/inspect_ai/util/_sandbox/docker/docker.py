@@ -12,10 +12,14 @@ from inspect_ai.util._subprocess import ExecResult
 
 from ..environment import (
     SandboxConnection,
-    SandboxConnectionContainer,
     SandboxEnvironment,
+    SandboxEnvironmentConfigType,
 )
-from ..limits import verify_exec_result_size, verify_read_file_size
+from ..limits import (
+    SandboxEnvironmentLimits,
+    verify_exec_result_size,
+    verify_read_file_size,
+)
 from ..registry import sandboxenv
 from .cleanup import (
     cli_cleanup,
@@ -51,7 +55,9 @@ class DockerSandboxEnvironment(SandboxEnvironment):
         return CONFIG_FILES + [DOCKERFILE]
 
     @classmethod
-    async def task_init(cls, task_name: str, config: str | None) -> None:
+    async def task_init(
+        cls, task_name: str, config: SandboxEnvironmentConfigType | None
+    ) -> None:
         # validate prereqs
         await validate_prereqs()
 
@@ -98,13 +104,16 @@ class DockerSandboxEnvironment(SandboxEnvironment):
     @override
     @classmethod
     async def sample_init(
-        cls, task_name: str, config: str | None, metadata: dict[str, str]
+        cls,
+        task_name: str,
+        config: SandboxEnvironmentConfigType | None,
+        metadata: dict[str, str],
     ) -> dict[str, SandboxEnvironment]:
         sandbox_log("setup")
 
         # create environment variables for sample metadata
         env: dict[str, str] = {}
-        if config and Path(config).exists():
+        if isinstance(config, str) and Path(config).exists():
             # read the config file
             with open(config, "r") as f:
                 config_text = f.read()
@@ -175,7 +184,7 @@ class DockerSandboxEnvironment(SandboxEnvironment):
     async def sample_cleanup(
         cls,
         task_name: str,
-        config: str | None,
+        config: SandboxEnvironmentConfigType | None,
         environments: dict[str, SandboxEnvironment],
         interrupted: bool,
     ) -> None:
@@ -191,7 +200,7 @@ class DockerSandboxEnvironment(SandboxEnvironment):
 
     @classmethod
     async def task_cleanup(
-        cls, task_name: str, config: str | None, cleanup: bool
+        cls, task_name: str, config: SandboxEnvironmentConfigType | None, cleanup: bool
     ) -> None:
         await project_cleanup_shutdown(cleanup)
 
@@ -241,6 +250,7 @@ class DockerSandboxEnvironment(SandboxEnvironment):
             project=self._project,
             timeout=timeout,
             input=input,
+            output_limit=SandboxEnvironmentLimits.MAX_EXEC_OUTPUT_SIZE,
         )
         verify_exec_result_size(exec_result)
         if exec_result.returncode == 126 and "permission denied" in exec_result.stdout:
@@ -369,6 +379,7 @@ class DockerSandboxEnvironment(SandboxEnvironment):
                     dest=os.path.basename(dest_file),
                     project=self._project,
                     cwd=os.path.dirname(dest_file),
+                    output_limit=SandboxEnvironmentLimits.MAX_READ_FILE_SIZE,
                 )
             except RuntimeError as ex:
                 # extract the message and normalise case
@@ -413,10 +424,9 @@ class DockerSandboxEnvironment(SandboxEnvironment):
 
         # return container login
         if container:
-            return SandboxConnectionContainer(
+            return SandboxConnection(
                 command=f"docker exec -it {container} /bin/bash --login",
                 container=container,
-                working_dir=self._working_dir,
             )
 
         # error (not currently running)

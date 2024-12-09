@@ -23,6 +23,7 @@ from inspect_ai.scorer._reducer import ScoreReducer, reducer_log_names
 from inspect_ai.scorer._reducer.registry import validate_reducer
 from inspect_ai.solver._solver import Solver, SolverSpec
 from inspect_ai.util._sandbox.environment import (
+    SandboxEnvironmentConfigType,
     SandboxEnvironmentSpec,
     SandboxEnvironmentType,
     TaskCleanup,
@@ -168,6 +169,7 @@ async def eval_run(
                     metadata=task.metadata,
                     recorder=recorder,
                 )
+                await logger.init()
 
                 # append task
                 task_run_options.append(
@@ -287,6 +289,12 @@ async def run_multiple(tasks: list[TaskRunOptions], parallel: int) -> list[EvalL
                 await task
                 result = task.result()
                 results.append(result)
+            except Exception as ex:
+                # errors generally don't escape from tasks (the exception being if an error
+                # occurs during the final write of the log)
+                log.error(
+                    f"Task '{task_options.task.name}' encountered an error during finalisation: {ex}"
+                )
 
             # tracking
             tasks_completed += 1
@@ -340,7 +348,7 @@ async def startup_sandbox_environments(
                 sandboxenvs.add(sandbox)
 
     # initialiase sandboxenvs (track cleanups)
-    cleanups: list[tuple[TaskCleanup, str | None, str]] = []
+    cleanups: list[tuple[TaskCleanup, SandboxEnvironmentConfigType | None, str]] = []
     with display().suspend_task_app():
         for sandboxenv in sandboxenvs:
             # find type

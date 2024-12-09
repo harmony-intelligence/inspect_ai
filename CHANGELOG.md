@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- Tools: Improved typing/schema support (unions, optional params, enums).
+- Docker sandbox: Streamed reads of stderr/stdout (enabling us to enforce output limits for read_file and exec at the source).
+- Sandbox API: Enable passing `BaseModel` types for sandbox `config` (formerly only a file path could be passed).
+- Task display: Show completed samples and align progress more closely to completed samples (as opposed to steps).
+- Task display: Show sample messages/tokens used (plus limits if specified).
+- Human approval: Use fullcreen display (makes approval UI async and enables rapid processing of approvals via the `Enter` key).
+- Log recorder: Methods are now async which will improve performance for fsspec filesystems with async implementations (e.g. S3)
+- Log recorder: Improve `.eval` log reading performance for remote filesystem (eaglery fetch log to local buffer).
+- Add `token_usage` property to `TaskState` which has current total tokens used across all calls to `generate()` (same value that is used for enforcing token limits).
+- Add `time` field to `ModelOutput` that records total time spent within call to ModelAPI `generate()`.
+- Web browser: Remove base64 images from web page contents (prevent filling up model context with large images).
+- Match scorer: If the target of a match isn’t numeric, ignore the numeric flag and instead use text matching (improved handling for percentages).
+- Hugging Face: Support for native HF tool calling for Llama, Mistral, Qwen, and others if they conform to various standard schemas.
+- Hugging Face: `tokenizer_call_args` dict to specify custom args during tokenization, such as `max_length` and `truncation`.
+- Azure AI: Fix schema validation error that occurred when model API returns `None` for `content`.
+- Bugfix: `hf_dataset` now explicitly requires the `split` argument (previously, it would crash when not specified).
+- Bugfix: Prevent cascading textual error when an error occurs during task initialisation.
+- Bugfix: Correctly restore sample summaries from log file after abend.
+- Bugfix: Report errors that occur during task finalisation.
+  
+## v0.3.49 (03 December 2024)
+
+- Logging: Only call CreateBucket on Amazon S3 when the bucket does not already exist.
+- Improve cancellation feedback and prevent multiple cancellations when using fullscreen display.
+- Inspect View: Prevent circular reference error when rendering complex tool input.
+- Inspect View: Resolve display issue with sorting by sample then epoch. 
+
+## v0.3.48 (01 December 2024) 
+
 - [Realtime display](https://github.com/UKGovernmentBEIS/inspect_ai/pull/865) of sample transcripts (including ability to cancel running samples).
 - Scoring: When using a dictionary to map metrics to score value dictionaries, you may now use globs as keys. See our [scorer documentation](https://inspect.ai-safety-institute.org.uk/scorers.html#sec-multiple-scorers) for more information.
 - `EvalLog` now includes a [location](https://github.com/UKGovernmentBEIS/inspect_ai/pull/872) property indicating where it was read from.
@@ -9,7 +38,9 @@
 - Consistent behavior for `max_samples` across sandbox and non-sandbox evals (both now apply `max_samples` per task, formerly evals with sandboxes applied `max_samples` globally).
 - Log files now properly deal with scores that produce Nan. (fixes [#834](https://github.com/UKGovernmentBEIS/inspect_ai/issues/834))
 - Bash tool: add `--login` option so that e.g. .bashrc is read before executing the command.
+- Google: Support for tools/functions that have no parameters.
 - Google/Vertex: Support for `logprobs` and other new 1.5 (002 series) options.
+- AzureAI: Change default max_tokens for Llama models to 2048 (4096 currently yields an error w/ Llama 3.1).
 - Mistral: Various compatiblity changes for their client and tool calling implementation.
 - Handle exponents in numeric normalisation for match, include, and answer scorers.
 - hf_dataset: Added `cached` argument to control whether to use a previously cached version of the dataset if available (defaults to `True`). 
@@ -20,7 +51,7 @@
 - Log viewer: Show custom tool call views in messages display.
 - Bugfix: Correctly read and forward image detail property.
 - Bugfix: Correct resolution of global eval override of task or sample sandboxes.
-- Bugfix: Don't do eval log listing on background threads (s3fs can deadlock when run from mutliple threads)
+- Bugfix: Don't do eval log listing on background threads (s3fs can deadlock when run from mutliple threads).
 
 ## v0.3.47 (18 November 2024) 
 
@@ -85,7 +116,6 @@
 - Add `INSPECT_DISABLE_MODEL_API` environment variable for disabling all Model APIs save for mockllm.
 - Add optional `tool_call_id` param to `ModelOutput.for_tool_call()`.
 - Support all JSON and CSV dataset arguments in `file_dataset()` function.
-
 
 ## v0.3.42 (23 October 2024)
 
